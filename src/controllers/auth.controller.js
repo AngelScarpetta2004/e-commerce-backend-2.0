@@ -1,42 +1,57 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
+const Admin = require("../models/admin.model"); // Asegúrate de tener este modelo
 
-// Registrar usuario
+// Crear usuario admin al iniciar (ejecutar una vez)
+const createAdminUser = async () => {
+  try {
+    const adminExists = await Admin.findOne({ email: "admin@ecommerce.com" });
+    if (!adminExists) {
+      await Admin.create({
+        name: "Admin",
+        email: "admin@ecommerce.com",
+        password: await bcrypt.hash("Admin123!", 10),
+        role: "admin"
+      });
+      console.log("✅ Admin user created");
+    }
+  } catch (error) {
+    console.error("Admin creation error:", error);
+  }
+};
+
+// Ejecutar al iniciar la aplicación
+createAdminUser();
+
+// Registrar usuario normal
 const register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
     
     if (!name || !email || !password) {
       return res.status(400).json({ message: "Todos los campos son obligatorios" });
     }
 
-    // Verificar si el usuario existe
     const existingUser = await User.findOne({ email });
-
     if (existingUser) {
       return res.status(400).json({ message: "El email ya está registrado" });
     }
 
-    // Encriptar contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Obtener ruta de la imagen de perfil si se subió una
     const profileImage = req.file ? `/uploads/users/${req.file.filename}` : null;
 
-    // Crear usuario
     const newUser = new User({
       name,
       email,
       password: hashedPassword,
-      role,
+      role: "user", // Fijamos como usuario normal
       profileImage
     });
 
-    // Guardar el usuario
     await newUser.save();
     res.status(201).json({ 
-      message: "Usuario Registrado con éxito",
+      message: "Usuario registrado con éxito",
       user: {
         id: newUser._id,
         name: newUser.name,
@@ -51,7 +66,60 @@ const register = async (req, res) => {
   }
 };
 
-// Actualizar imagen de perfil
+// Login modificado
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Primero verificar si es admin
+    if (email === "admin@ecommerce.com") {
+      const admin = await Admin.findOne({ email });
+      if (!admin) return res.status(400).json({ message: "Credenciales inválidas" });
+
+      const isMatch = await bcrypt.compare(password, admin.password);
+      if (!isMatch) return res.status(400).json({ message: "Credenciales inválidas" });
+
+      const token = jwt.sign(
+        { id: admin._id, name: admin.name, role: admin.role },
+        process.env.JWT_SECRET,
+        { expiresIn: "1h" }
+      );
+
+      return res.json({
+        token,
+        user: {
+          id: admin._id,
+          name: admin.name,
+          email: admin.email,
+          role: admin.role
+        }
+      });
+    }
+
+    // Login para usuarios normales (sin token)
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ message: "Credenciales inválidas" });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ message: "Credenciales inválidas" });
+
+    res.json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        profileImage: user.profileImage
+      }
+    });
+
+  } catch (error) {
+    console.error("Error en login: ", error);
+    res.status(500).json({ message: "Error al iniciar sesión" });
+  }
+}
+
+// Actualizar imagen de perfil (solo para usuarios normales)
 const updateProfileImage = async (req, res) => {
   try {
     if (!req.file) {
@@ -78,59 +146,8 @@ const updateProfileImage = async (req, res) => {
   }
 };
 
-// Iniciar sesion
-const login = async (req, res) => {
-  try{
-    const { email, password } = req.body;
-    const user = await user.findOne({email});
-
-    // Verificar si el usuario existe
-    if(!user){
-      return res.status(400).json({ message: "Usuario no encontrado"});
-    }
-
-    // Verificar la contraseña
-    const isMatch = await bcrypt.compare(password, user.password);
-    if(!isMatch){
-      return res.status(400).json({ message: "Contraseña incorrecta"});
-    }
-
-    //Agregar el rol al token
-    const token = jwt.sign({
-      id: user._id,
-      name: user.name,
-      role: user.role,
-      },
-      process.env.JWT_SECRET,
-     { expiresIn: "1h" }
-    );
-
-    // devolver el token y los datos del usuario
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
-    });
-
-  }catch (error){
-    console.error(" Error en login: ", error);
-    res.status(500).json({ message: "Error al inicar sesion"});
-  }
-}
-
 module.exports = { 
   register, 
   login,
   updateProfileImage 
 };
-
-
-
-
-
-
-

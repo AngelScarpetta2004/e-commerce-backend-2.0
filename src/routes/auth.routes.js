@@ -1,6 +1,6 @@
 const express = require("express");
 const { check } = require("express-validator");
-const { register, login } = require("../controllers/auth.controller");
+const { register, login, adminLogin } = require("../controllers/auth.controller");
 const validateFields = require("../middlewares/validateFields");
 
 const router = express.Router();
@@ -16,7 +16,7 @@ const router = express.Router();
  * @swagger
  * /auth/register:
  *   post:
- *     summary: Registrar un nuevo usuario
+ *     summary: Registrar un nuevo usuario normal
  *     tags: [Autenticación]
  *     requestBody:
  *       required: true
@@ -35,10 +35,6 @@ const router = express.Router();
  *               password:
  *                 type: string
  *                 example: "123456"
- *               role:
- *                 type: string
- *                 enum: [admin, usuario]
- *                 example: "usuario"
  *     responses:
  *       201:
  *         description: Usuario registrado con éxito
@@ -60,8 +56,9 @@ router.post(
  * @swagger
  * /auth/login:
  *   post:
- *     summary: Iniciar sesión
+ *     summary: Iniciar sesión (usuarios normales)
  *     tags: [Autenticación]
+ *     description: Login para usuarios normales (no devuelve token)
  *     requestBody:
  *       required: true
  *       content:
@@ -79,6 +76,24 @@ router.post(
  *     responses:
  *       200:
  *         description: Inicio de sesión exitoso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *                     profileImage:
+ *                       type: string
  *       400:
  *         description: Error en la autenticación
  */
@@ -90,6 +105,61 @@ router.post(
     validateFields
   ],
   login
+);
+
+/**
+ * @swagger
+ * /auth/admin/login:
+ *   post:
+ *     summary: Iniciar sesión (admin)
+ *     tags: [Autenticación]
+ *     description: Login exclusivo para administradores (devuelve token JWT)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: "admin@ecommerce.com"
+ *               password:
+ *                 type: string
+ *                 example: "Admin123!"
+ *     responses:
+ *       200:
+ *         description: Inicio de sesión exitoso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *       400:
+ *         description: Error en la autenticación
+ */
+router.post(
+  "/admin/login",
+  [
+    check("email", "El email no es válido").isEmail(),
+    check("password", "La contraseña es obligatoria").not().isEmpty(),
+    validateFields
+  ],
+  adminLogin
 );
 
 module.exports = router;
