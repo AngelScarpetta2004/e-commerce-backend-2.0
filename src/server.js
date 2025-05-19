@@ -12,11 +12,31 @@ const swaggerSpec = require('./config/swaggerSpec');
 const app = express();
 
 // Security Middlewares
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        imgSrc: ["'self'", "http://localhost:3000", "data:"], // Permitir imágenes desde localhost:3000
+        // puedes añadir otras directivas que necesites o dejar el resto igual
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", 'https:', "'unsafe-inline'"],
+        fontSrc: ["'self'", "https:", "data:"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    crossOriginResourcePolicy: {
+      policy: "cross-origin"  // cambiar de same-origin a cross-origin para recursos cruzados
+    }
+  })
+);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: 'http://localhost:3000',
+  credentials: true,
 }));
+
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -24,20 +44,26 @@ app.use(morgan('dev'));
 
 // Rate Limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200,
 });
 app.use('/api/', limiter);
 
 // Database Connection
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('✅ MongoDB Connected'))
-.catch(err => console.error('❌ MongoDB Connection Error:', err));
+mongoose
+  .connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 
-// Static Files
+// app.use('/uploads', (req, res, next) => {
+//   res.header('Access-Control-Allow-Origin', 'http://localhost:3000'); // frontend URL
+//   res.header('Access-Control-Allow-Credentials', 'true');
+//   next();
+// }, express.static(path.join(__dirname, 'uploads')));
+
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // API Documentation
@@ -55,7 +81,7 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
     timestamp: new Date(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
   });
 });
 
@@ -65,7 +91,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({
     success: false,
     message: err.message || 'Internal Server Error',
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
   });
 });
 
