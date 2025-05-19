@@ -1,6 +1,6 @@
 const express = require("express");
 const { check } = require("express-validator");
-const { register, login, adminLogin } = require("../controllers/auth.controller");
+const { register, login } = require("../controllers/auth.controller");
 const validateFields = require("../middlewares/validateFields");
 
 const router = express.Router();
@@ -159,7 +159,7 @@ router.post(
     check("password", "La contraseña es obligatoria").not().isEmpty(),
     validateFields
   ],
-  adminLogin
+  login
 );
 
 module.exports = router;

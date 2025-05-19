@@ -1,28 +1,5 @@
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
-const Admin = require("../models/admin.model"); // Asegúrate de tener este modelo
-
-// Crear usuario admin al iniciar (ejecutar una vez)
-const createAdminUser = async () => {
-  try {
-    const adminExists = await Admin.findOne({ email: "admin@ecommerce.com" });
-    if (!adminExists) {
-      await Admin.create({
-        name: "Admin",
-        email: "admin@ecommerce.com",
-        password: await bcrypt.hash("Admin123!", 10),
-        role: "admin"
-      });
-      console.log("✅ Admin user created");
-    }
-  } catch (error) {
-    console.error("Admin creation error:", error);
-  }
-};
-
-// Ejecutar al iniciar la aplicación
-createAdminUser();
 
 // Registrar usuario normal
 const register = async (req, res) => {
@@ -33,23 +10,31 @@ const register = async (req, res) => {
       return res.status(400).json({ message: "Todos los campos son obligatorios" });
     }
 
+    // Verificar si el email es el de admin
+    if (email === process.env.ADMIN_EMAIL) {
+      return res.status(403).json({ 
+        message: 'No puedes registrarte con este email' 
+      });
+    }
+
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: "El email ya está registrado" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
     const profileImage = req.file ? `/uploads/users/${req.file.filename}` : null;
 
+    // Crear usuario (siempre como 'user')
     const newUser = new User({
       name,
       email,
-      password: hashedPassword,
-      role: "user", // Fijamos como usuario normal
+      password, // El middleware pre-save se encargará de hashear
+      role: "user",
       profileImage
     });
 
     await newUser.save();
+    
     res.status(201).json({ 
       message: "Usuario registrado con éxito",
       user: {
@@ -62,48 +47,40 @@ const register = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en registro: ", error);
-    res.status(500).json({ message: "Error en el servidor" });
+    res.status(500).json({ 
+      message: error.message || "Error en el servidor" 
+    });
   }
 };
 
-// Login modificado
+// Inicio de sesión unificado
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // Primero verificar si es admin
-    if (email === "admin@ecommerce.com") {
-      const admin = await Admin.findOne({ email });
-      if (!admin) return res.status(400).json({ message: "Credenciales inválidas" });
-
-      const isMatch = await bcrypt.compare(password, admin.password);
-      if (!isMatch) return res.status(400).json({ message: "Credenciales inválidas" });
-
-      const token = jwt.sign(
-        { id: admin._id, name: admin.name, role: admin.role },
-        process.env.JWT_SECRET,
-        { expiresIn: "1h" }
-      );
-
-      return res.json({
-        token,
-        user: {
-          id: admin._id,
-          name: admin.name,
-          email: admin.email,
-          role: admin.role
-        }
-      });
+    // Buscar usuario (ya sea admin o user normal)
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: "Credenciales inválidas" });
     }
 
-    // Login para usuarios normales (sin token)
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "Credenciales inválidas" });
-
+    // Verificar contraseña
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Credenciales inválidas" });
+    if (!isMatch) {
+      return res.status(400).json({ message: "Credenciales inválidas" });
+    }
 
-    res.json({
+    // Solo generar token para admin
+    const token = user.role === 'admin' 
+      ? jwt.sign(
+          { id: user._id, name: user.name, role: user.role },
+          process.env.JWT_SECRET,
+          { expiresIn: "8h" } // Token más largo para admin
+        )
+      : null;
+
+    // Respuesta diferenciada
+    const response = {
       user: {
         id: user._id,
         name: user.name,
@@ -111,15 +88,42 @@ const login = async (req, res) => {
         role: user.role,
         profileImage: user.profileImage
       }
-    });
+    };
+
+    if (token) {
+      response.token = token;
+    }
+
+    res.json(response);
 
   } catch (error) {
     console.error("Error en login: ", error);
     res.status(500).json({ message: "Error al iniciar sesión" });
   }
-}
+};
 
-// Actualizar imagen de perfil (solo para usuarios normales)
+// Crear usuario admin inicial (ejecutar manualmente una vez)
+const createAdmin = async () => {
+  try {
+    const adminExists = await User.findOne({ role: 'admin' });
+    
+    if (!adminExists) {
+      await User.create({
+        name: 'Admin Principal',
+        email: process.env.ADMIN_EMAIL,
+        password: process.env.ADMIN_PASSWORD, // El pre-save lo hasheará
+        role: 'admin'
+      });
+      console.log('✅ Admin creado exitosamente');
+    } else {
+      console.log('ℹ️ Ya existe un admin en el sistema');
+    }
+  } catch (error) {
+    console.error('❌ Error creando admin:', error.message);
+  }
+};
+
+// Actualizar imagen de perfil
 const updateProfileImage = async (req, res) => {
   try {
     if (!req.file) {
@@ -130,7 +134,7 @@ const updateProfileImage = async (req, res) => {
       req.user.id,
       { profileImage: `/uploads/users/${req.file.filename}` },
       { new: true }
-    );
+    ).select('-password');
 
     if (!user) {
       return res.status(404).json({ message: "Usuario no encontrado" });
@@ -149,5 +153,6 @@ const updateProfileImage = async (req, res) => {
 module.exports = { 
   register, 
   login,
-  updateProfileImage 
+  updateProfileImage,
+  createAdmin
 };

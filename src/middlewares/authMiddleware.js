@@ -1,37 +1,53 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/user.model");
 
-const authenticateToken = (req, res, next) => {
-  // Excluir rutas públicas
-  if (req.path.startsWith('/auth/login') || req.path.startsWith('/auth/register')) {
-    return next();
-  }
-
-  // Solo requerir token para rutas admin
-  if (req.path.startsWith('/admin')) {
-    const authHeader = req.headers["authorization"];
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Acceso denegado. Token requerido" });
-    }
-
-    const token = authHeader.split(" ")[1];
+const authenticateToken = (requiredRole = null) => {
+  return async (req, res, next) => {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      // Obtener token del header
+      const authHeader = req.headers["authorization"];
+      const token = authHeader && authHeader.split(" ")[1];
       
-      // Verificar que sea admin
-      if (decoded.role !== "admin") {
-        return res.status(403).json({ message: "Acceso solo para administradores" });
+      // Rutas públicas
+      if (req.path === '/auth/login' || req.path === '/auth/register') {
+        return next();
       }
 
-      req.user = decoded;
-      return next();
-    } catch (error) {
-      console.error("Error al verificar el token: ", error.message);
-      return res.status(401).json({ message: "Token inválido" });
-    }
-  }
+      // Rutas que requieren autenticación
+      if (!token) {
+        return res.status(401).json({ message: "Acceso no autorizado" });
+      }
 
-  // Para rutas de usuario normal, continuar sin token
-  next();
+      // Verificar token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Verificar si el usuario existe
+      const user = await User.findById(decoded.id).select('-password');
+      if (!user) {
+        return res.status(401).json({ message: "Usuario no encontrado" });
+      }
+
+      // Verificar rol si es requerido
+      if (requiredRole && user.role !== requiredRole) {
+        return res.status(403).json({ message: "Acceso prohibido" });
+      }
+
+      req.user = user;
+      next();
+    } catch (error) {
+      console.error("Error en autenticación:", error.message);
+      
+      if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({ message: "Token inválido" });
+      }
+      
+      if (error.name === 'TokenExpiredError') {
+        return res.status(401).json({ message: "Token expirado" });
+      }
+      
+      res.status(500).json({ message: "Error en la autenticación" });
+    }
+  };
 };
 
 module.exports = authenticateToken;
