@@ -1,5 +1,5 @@
 const User = require("../models/user.model");
-const bcrypt = require("bcryptjs");
+
 const { deleteImage } = require("../utils/fileUtils");
 
 /**
@@ -48,14 +48,13 @@ const updateProfile = async (req, res) => {
       updates.email = email;
     }
 
-    // Actualizar contraseña si se proporciona la actual y la nueva
-    if (currentPassword && newPassword) {
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
-      if (!isMatch) {
-        return res.status(401).json({ success: false, message: "Contraseña actual incorrecta" });
-      }
-      updates.password = newPassword; // El pre-save hook en el modelo se encargará del hashing
-    }
+   // Comparar contraseñas directamente (ya no se usa bcrypt)
+if (currentPassword && newPassword) {
+  if (currentPassword !== user.password) {
+    return res.status(401).json({ success: false, message: "Contraseña actual incorrecta" });
+  }
+  updates.password = newPassword;
+}
 
     // Actualizar imagen de perfil si se subió un archivo
     if (req.file) {
