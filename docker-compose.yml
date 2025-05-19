@@ -1,0 +1,43 @@
+
+
+services:
+  api:
+    build: .
+    container_name: ecommerce-api
+    ports:
+      - "4000:4000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=${PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - MONGO_URI=mongodb://root:ejemplo123@mongo:27017/ecommerceDB?authSource=admin
+    restart: unless-stopped
+    command: npm run dev
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  mongo:
+    image: mongo:5.0
+    container_name: ecommerce-mongo
+    restart: unless-stopped  # Cambiado de 'always'
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=ejemplo123
+      - MONGO_INITDB_DATABASE=ecommerceDB
+    volumes:
+      - mongodb_data:/data/db  # Nombre de volumen modificado
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh -u root -p ejemplo123 --quiet
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongodb_data:  # Volumen renombrado
+    driver: local
