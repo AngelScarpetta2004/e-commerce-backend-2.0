@@ -64,7 +64,8 @@ mongoose
 //   next();
 // }, express.static(path.join(__dirname, 'uploads')));
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Esto sirve archivos de la carpeta 'uploads' en la ruta '/uploads'
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // API Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
